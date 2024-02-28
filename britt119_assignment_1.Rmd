@@ -1,0 +1,161 @@
+---
+title: "Assignment 1"
+author: "Charlie Britt"
+date: "2024-02-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+setwd("C:\\Users\\cbrit\\Documents\\GEOG5103\\Assignment 1")
+library(sp)
+library(sf)
+library(tmap) # Mapping package
+library(spdep)
+library(RColorBrewer)
+library(classInt)
+```
+
+```{r}
+ny_sf <- st_read("NYAIDS-1")
+
+ny <- as(ny_sf, "Spatial")
+ny.df <- data.frame(ny)
+```
+<h1>Task 1</h1>
+```{r}
+t1 <- tm_shape(ny) +
+  tm_polygons("Rate1000", title = "Aids Cases", palette = "Reds",
+  style = "kmeans") +
+  tm_layout(legend.title.size = 0.7, title = "Rate of Aids Cases (per 1,000)", legend.outside = TRUE) + 
+  tm_compass() +
+  tm_scale_bar()
+  
+t1
+```
+
+<h1>Task 2</h1>
+
+<h2>Global Moran's I</h2>
+```{r}
+coords <- coordinates(ny)
+IDs <- row.names(as(ny, "data.frame"))
+ny_kn1 <- knn2nb(knearneigh(coords, k=1), row.names=IDs)
+ny_kn1_w <- nb2listw(ny_kn1)
+
+moran.test(ny$AllCases, listw=ny_kn1_w)
+```
+
+<h2>LISA</h2>
+```{r}
+postal  <-  order(ny$POSTAL)
+nylocI  <-  localmoran(ny$AllCases, ny_kn1_w, alternative="two.sided")
+printCoefmat(data.frame(nylocI[postal,], row.names=ny$POSTAL[postal]), check.names=TRUE)
+```
+
+```{r}
+hist(nylocI[,4])
+```
+
+<h1>Task 3</h1>
+<h2>LISA map</h2>
+```{r}
+# Plot the clusters
+quadrant <- vector(mode="numeric",length=nrow(nylocI))
+
+# centers the variable of interest around its mean
+m.cases <- ny$AllCases - mean(ny$AllCases)     
+
+# centers the local Moran's around the mean
+m.local <- nylocI[,1] - mean(nylocI[,1])    
+
+# significance threshold
+signif <- 0.05 
+
+# builds a data quadrant
+quadrant[m.cases >0 & m.local>0] <- 4  # high-high
+quadrant[m.cases <0 & m.local<0] <- 1  # low-low    
+quadrant[m.cases <0 & m.local>0] <- 2  # low-high
+quadrant[m.cases >0 & m.local<0] <- 3  # high-low
+quadrant[nylocI[,5]>signif] <- 0   # not significant
+
+# plot in R
+brks <- c(0, 1,2,3,4)
+colors <- c("white","blue",rgb(0,0,1,alpha=0.4),rgb(1,0,0,alpha=0.4),"red")
+plot(ny,border="lightgray",col=colors[findInterval(quadrant,brks,all.inside=FALSE)])
+box()
+legend("bottomleft", title='LISA',
+       legend = c("insignificant","low-low","low-high","high-low","high-high"),
+       fill=colors,bty="n")
+```
+
+<h2>G map</h2>
+
+```{r}
+ny.kn1<-knn2nb(knearneigh(coords, k=1, longlat=F))
+dist<-unlist(nbdists(ny.kn1, coords))
+nbkm <- dnearneigh(coords, 0, max(dist))
+```
+
+```{r}
+dataG <- cbind(coords, ny.df[,11])
+colnames(dataG) <- c("x", "y", "val")
+
+dataG.df <- as.data.frame(dataG)
+
+local_g <- localG(dataG.df$val, nb2listw(nbkm, style="B"))
+local_g <- cbind(ny, as.matrix(local_g))
+names(local_g)[24] <- "gstat"
+
+G <- tm_shape(local_g) + 
+  tm_fill("gstat", 
+          palette = "-RdBu",
+          style = "fixed", breaks = c(-3.29, -1.96, 0, 1.96, 3.29)) + 
+  tm_borders(alpha=.4) +
+  tm_layout(legend.title.size = 0.7, title = "G statistic map (NY)") + 
+  tm_compass() +
+  tm_scale_bar()
+```
+
+```{r}
+G
+```
+
+<h1>Task 4</h1>
+<h2>Percent living in Poverty</h2>
+```{r}
+pov <- tm_shape(ny) +
+  tm_polygons("PctPov", title = "Percent Poverty", palette = "Greens",
+  style = "kmeans") +
+  tm_layout(legend.title.size = 0.7, title = "Poverty Percentage") + 
+  tm_compass() +
+  tm_scale_bar()
+  
+pov
+```
+<h2>Percent of Population with HS Education</h2>
+```{r}
+pctHS <- tm_shape(ny) +
+  tm_polygons("PctHSEd", title = "Percent Pop. HS Degree", palette = "Purples",
+  style = "kmeans") + 
+  tm_layout(legend.title.size = 0.7, title = "Population with HS Ed.") + 
+  tm_compass() +
+  tm_scale_bar()
+  
+pctHS
+```
+<h2>Percent Black Population</h2>
+```{r}
+pctblack <- tm_shape(ny) +
+  tm_polygons("PctBlk", title = "Percent Black Population", palette = "Blues",
+  style = "kmeans") +
+  tm_layout(legend.title.size = 0.7, title = "Black Population (NY)") + 
+  tm_compass() +
+  tm_scale_bar()
+  
+pctblack
+```
+
